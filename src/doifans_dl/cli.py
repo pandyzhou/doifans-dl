@@ -16,6 +16,7 @@ def main():
     ap.add_argument("--proxy", help="HTTP/SOCKS proxy URL")
     ap.add_argument("--user", default=None, help="Login username (default: built-in)")
     ap.add_argument("--password", default=None, help="Login password (default: built-in)")
+    ap.add_argument("--cookie", default=None, help="Session cookie string (doifans_session=xxx) or path to cookie file")
     ap.add_argument("--json", action="store_true", help="JSON output (default for --list)")
     ap.add_argument("--text", action="store_true", help="Human-readable output")
     args = ap.parse_args()
@@ -25,7 +26,7 @@ def main():
     use_json = args.json or (args.list and not args.text)
 
     if args.cmd == "doctor":
-        ok = client.login(args.user or "cncmeng", args.password or "123123")
+        ok = client.login(args.user, args.password)
         result = {"auth": ok, "proxy": args.proxy or "none", "base": client.base}
         if use_json or not args.text:
             print(json.dumps(result))
@@ -38,10 +39,11 @@ def main():
         ap.print_help()
         sys.exit(1)
 
-    user = args.user or "cncmeng"
-    password = args.password or "123123"
-
-    if not client.login(user, password):
+    if args.cookie:
+        if not client.login_with_cookie(args.cookie):
+            _out(use_json, {"error": "cookie_invalid"}, "[-] Cookie login failed")
+            sys.exit(1)
+    elif not client.login(args.user, args.password):
         _out(use_json, {"error": "login_failed"}, "[-] Login failed")
         sys.exit(1)
 
