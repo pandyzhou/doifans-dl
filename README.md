@@ -89,7 +89,7 @@ doifans-dl ouyangqin
 
 ### 社区
 
-- [Linux.do 讨论帖](https://linux.do) — 技术讨论与反馈
+- [Linux.do 论坛](https://linux.do) — 技术讨论与反馈
 
 ---
 
