@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "doifans-dl"
+version = "1.0.0"
+description = "DoiFans paywall bypass video downloader"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.28"]
+
+[project.scripts]
+doifans-dl = "doifans_dl.cli:main"
