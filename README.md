@@ -87,6 +87,10 @@ doifans-dl ouyangqin
 - 视频文件较大, 确保磁盘空间充足
 - 代理需要稳定, 大文件下载中断需重新运行 (已下载的会跳过)
 
+### 社区
+
+- [Linux.do 讨论帖](https://linux.do) — 技术讨论与反馈
+
 ---
 
 ## English
@@ -148,6 +152,10 @@ doifans-dl --proxy http://127.0.0.1:7890 doctor
 | Mass assignment | `POST /settings/page` | Modify user fields (password, stripe_id, etc.) |
 | WAF bypass (trailing slash) | `POST /subscription/free/` | Free subscription to any creator |
 | PHP execution on config files | `GET /config/app.php` | Direct PHP-FPM execution of config files |
+
+### Community
+
+- [Linux.do 讨论帖](https://linux.do) — 技术细节讨论与反馈
 
 ### Disclaimer
 
