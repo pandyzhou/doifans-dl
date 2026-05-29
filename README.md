@@ -6,11 +6,11 @@ Downloads any creator's paid/locked videos without a valid subscription.
 
 ---
 
-**[中文说明](#中文说明)** | **[English](#english)**
+**[中文](#中文)** | **[English](#english)**
 
 ---
 
-## 中文说明
+## 中文
 
 ### 这是什么
 
