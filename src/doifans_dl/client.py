@@ -73,27 +73,60 @@ class DoiFans:
 
     def resolve_creator_id(self, username):
         """Resolve creator username to numeric ID. Requires active session."""
-        # Try accessing creator page and extracting ID from HTML
         r = self.s.get(f"{self.base}/{username}", headers={"Accept": "text/html",
                        "User-Agent": "Mozilla/5.0"}, timeout=15)
         if r.status_code != 200:
             return None
+
         # Method 1: userId pattern in JS/HTML
         m = re.search(r'(?:userId|user_id|data-userid)["\s:=]+["\']?(\d{4,6})', r.text)
         if m:
             return m.group(1)
-        # Method 2: from avatar/cover filename pattern: username-{id}{timestamp}
-        m = re.search(rf'{re.escape(username)}-(\d{{4,6}})', r.text)
+
+        # Method 2: from avatar/cover filename: username-{id}{timestamp}
+        m = re.search(rf'/(?:avatar|cover)/{re.escape(username)}-(\d{{4,6}})', r.text)
         if m:
             return m.group(1)
-        # Method 3: brute search ajax/updates with candidate IDs from page
-        candidates = set(re.findall(r'(\d{4,6})', r.text[:10000]))
+
+        # Method 3: try subscribe with candidate IDs (returns "资金不足" for valid creators)
+        candidates = set(re.findall(r'\b(\d{4,6})\b', r.text[:20000]))
+        # Also add IDs from ajax/updates page
+        r2 = self.s.get(f"{self.base}/ajax/updates",
+                       headers={"X-Requested-With": "XMLHttpRequest"},
+                       params={"id": "0", "skip": "0"}, timeout=10)
+        # Extract from explore
+        r3 = self.s.get(f"{self.base}/ajax/explore",
+                       headers={"X-Requested-With": "XMLHttpRequest"}, timeout=10)
+        if username in r3.text:
+            # Find ID near username in explore HTML
+            idx = r3.text.find(username)
+            nearby = r3.text[max(0, idx-200):idx+200]
+            nearby_ids = re.findall(r'\b(\d{4,6})\b', nearby)
+            candidates.update(nearby_ids)
+
+        # Test candidates via ajax/updates (returns content for valid creator IDs)
         for cid in sorted(candidates, key=int):
-            r2 = self.s.get(f"{self.base}/ajax/updates",
-                           headers={"X-Requested-With": "XMLHttpRequest"},
-                           params={"id": cid, "skip": "0"}, timeout=10)
-            if len(r2.text) > 5000 and username in r2.text:
-                return cid
+            try:
+                r4 = self.s.get(f"{self.base}/ajax/updates",
+                               headers={"X-Requested-With": "XMLHttpRequest"},
+                               params={"id": cid, "skip": "0"}, timeout=5)
+                if len(r4.text) > 5000 and username in r4.text:
+                    return cid
+            except:
+                pass
+
+        # Method 4: try /buy/subscription (returns 资金不足 for valid, 404 for invalid)
+        h = self._headers(f"/{username}")
+        for cid in sorted(candidates, key=int):
+            try:
+                r5 = self.s.post(f"{self.base}/buy/subscription", headers=h,
+                               json={"id": cid, "interval": "monthly",
+                                     "payment_gateway": "wallet", "agree_terms": "1"},
+                               timeout=5)
+                if r5.status_code == 200 and "资金不足" in r5.text:
+                    return cid
+            except:
+                pass
         return None
 
     def subscribe(self, creator_id):
