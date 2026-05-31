@@ -71,6 +71,31 @@ class DoiFans:
                     pass
         return False
 
+    def resolve_creator_id(self, username):
+        """Resolve creator username to numeric ID. Requires active session."""
+        # Try accessing creator page and extracting ID from HTML
+        r = self.s.get(f"{self.base}/{username}", headers={"Accept": "text/html",
+                       "User-Agent": "Mozilla/5.0"}, timeout=15)
+        if r.status_code != 200:
+            return None
+        # Method 1: userId pattern in JS/HTML
+        m = re.search(r'(?:userId|user_id|data-userid)["\s:=]+["\']?(\d{4,6})', r.text)
+        if m:
+            return m.group(1)
+        # Method 2: from avatar/cover filename pattern: username-{id}{timestamp}
+        m = re.search(rf'{re.escape(username)}-(\d{{4,6}})', r.text)
+        if m:
+            return m.group(1)
+        # Method 3: brute search ajax/updates with candidate IDs from page
+        candidates = set(re.findall(r'(\d{4,6})', r.text[:10000]))
+        for cid in sorted(candidates, key=int):
+            r2 = self.s.get(f"{self.base}/ajax/updates",
+                           headers={"X-Requested-With": "XMLHttpRequest"},
+                           params={"id": cid, "skip": "0"}, timeout=10)
+            if len(r2.text) > 5000 and username in r2.text:
+                return cid
+        return None
+
     def subscribe(self, creator_id):
         """Subscribe to a creator using wallet balance."""
         h = self._headers(f"/{creator_id}")

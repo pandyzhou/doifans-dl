@@ -37,19 +37,12 @@ def main():
     # Resolve creator ID
     creator_id = args.id
     if not creator_id:
-        # Get creator page to find ID
-        r = client.s.get(f"{client.base}/{args.creator}", timeout=15)
-        import re
-        m = re.search(r'data-user-id="(\d+)"|"userId":(\d+)|id="45\d+"', r.text)
-        # Try to get from subscribe button or ajax
-        m2 = re.search(r'"id"\s*:\s*"?(\d{3,})"?', r.text)
-        if m:
-            creator_id = int(m.group(1) or m.group(2))
-        elif m2:
-            creator_id = int(m2.group(1))
-        else:
-            print(f"[!] Cannot find creator ID for {args.creator}", file=sys.stderr)
+        print(f"[*] Resolving creator ID for '{args.creator}'...")
+        creator_id = client.resolve_creator_id(args.creator)
+        if not creator_id:
+            print(f"[!] Cannot find creator ID for '{args.creator}'", file=sys.stderr)
             sys.exit(1)
+        creator_id = int(creator_id)
     print(f"[*] Creator: {args.creator} (id={creator_id})")
 
     # Subscribe
